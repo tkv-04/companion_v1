@@ -1,7 +1,6 @@
 import os
-from gtts import gTTS
-from pydub import AudioSegment
-from pydub.playback import play
+import asyncio
+import edge_tts
 import pygame
 import tempfile
 import config
@@ -22,29 +21,40 @@ def start():
         log.error("Failed to init pygame for TTS: %s", e)
 
 def speak_sync(text: str) -> None:
-    """Send text to speakers (Blocking)."""
+    """Send text to speakers (Blocking/Async wrapper)."""
     if not text: return
     
-    # 1. Determine language — can detect if text contains Malayalam
-    lang = config.CURRENT_LANGUAGE 
-    # If the user explicitly asks to switch, Gemini can be told in prompt, 
-    # and we can optionally detect language here too.
+    # Run the async tts function
+    try:
+        asyncio.run(_speak_edge_tts(text))
+    except Exception as e:
+        log.error("TTS Error: %s", e)
+        _say_local(text)
+
+async def _speak_edge_tts(text: str) -> None:
+    """Uses Microsoft Edge Neural voices for smoother, softer output."""
+    # 1. Select Voice
+    if config.CURRENT_LANGUAGE == "ml":
+        voice = "ml-IN-SobhanaNeural" # Soft Malayalam Female
+    else:
+        voice = "en-US-AvaNeural"      # Very Soft English Female (Emma or Ava)
     
     try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as f:
-            temp_path = f.name
-        
-        # 2. Get audio from Google
-        tts = gTTS(text=text, lang=lang, slow=False)
-        tts.save(temp_path)
-        
+        tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
+        temp_path = tmp_file.name
+        tmp_file.close()
+
+        # 2. Communicate with Edge TTS
+        communicate = edge_tts.Communicate(text, voice)
+        await communicate.save(temp_path)
+
         # 3. Play via PyGame
         if not _pygame_inited: start()
         
         pygame.mixer.music.load(temp_path)
         pygame.mixer.music.play()
         while pygame.mixer.music.get_busy():
-            pygame.time.Clock().tick(10)
+            await asyncio.sleep(0.05)
             
         # Clean up
         pygame.mixer.music.unload()
@@ -52,9 +62,8 @@ def speak_sync(text: str) -> None:
         except: pass
         
     except Exception as e:
-        log.error("gTTS Error: %s", e)
-        # Fallback to local pyttsx3
-        _say_local(text)
+        log.error("Edge-TTS Error: %s", e)
+        raise e
 
 def speak(text: str) -> None:
     """Speak in a non-blocking thread."""

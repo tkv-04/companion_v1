@@ -47,7 +47,7 @@ _audio_queue: queue.Queue       = queue.Queue()
 _speech_buffer: list[np.ndarray] = []
 _in_speech     = False
 _silence_count = 0
-_SILENCE_CHUNKS_NEEDED = int(1.5 / config.AUDIO_CHUNK_DURATION)  # 1.5s silence to end speech
+_SILENCE_CHUNKS_NEEDED = int(1.2 / config.AUDIO_CHUNK_DURATION)  # More natural pause (1.2s silence)
 
 
 # ── Public API ─────────────────────────────────────────────────────────────
@@ -116,7 +116,11 @@ def _mic_capture_loop(callback: Callable[[str], None]) -> None:
             log.warning("Audio status: %s", status)
         _audio_queue.put(indata.copy())
 
+    # Use specific device ID if configured, otherwise use system default (-1)
+    device_id = config.AUDIO_DEVICE_ID if config.AUDIO_DEVICE_ID != -1 else None
+
     with sd.InputStream(
+        device=device_id,
         samplerate=config.AUDIO_SAMPLE_RATE,
         channels=config.AUDIO_CHANNELS,
         dtype="float32",
@@ -161,22 +165,30 @@ def _process_chunk(chunk: np.ndarray, callback: Callable[[str], None]) -> None:
             log.debug("Speech ended. Buffered %d chunks.", len(_speech_buffer))
             audio_data = np.concatenate(_speech_buffer, axis=0).flatten()
             _speech_buffer = []
-            _in_speech     = False
+            _in_speech = False
             _silence_count = 0
+
+            # ── Resample to 16000Hz if needed (Whisper requirement) ────────────
+            if config.AUDIO_SAMPLE_RATE != 16000:
+                from scipy import signal
+                num_samples = int(len(audio_data) * 16000 / config.AUDIO_SAMPLE_RATE)
+                audio_data = signal.resample(audio_data, num_samples)
+
             _transcribe(audio_data, callback)
 
 
 def _transcribe(audio: np.ndarray, callback: Callable[[str], None]) -> None:
     """Run Whisper STT on buffered audio."""
     try:
-        model  = _get_whisper()
-        import whisper
-        result = model.transcribe(audio, fp16=False, language="en")
-        text   = result.get("text", "").strip()
+        model = _get_whisper()
+        # Use current language from config for better accuracy (e.g., 'ml' for Malayalam)
+        lang = config.CURRENT_LANGUAGE if config.CURRENT_LANGUAGE in ["en", "ml"] else None
+        
+        result = model.transcribe(audio, fp16=False, language=lang)
+        text = result.get("text", "").strip()
+        
         if text:
-            log.info("STT: %s", text)
+            log.info("🎤 Captured: %s", text)
             callback(text)
-        else:
-            log.debug("Empty transcription — ignoring.")
     except Exception as e:
         log.error("Whisper error: %s", e)

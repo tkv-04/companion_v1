@@ -25,6 +25,46 @@ log = get_logger("email_service")
 _running = False
 _thread: threading.Thread | None = None
 
+def _decode_header(header_val: Any) -> str:
+    """Safely decode email header."""
+    if not header_val:
+        return "(no subject)"
+    decoded = decode_header(header_val)
+    parts = []
+    for content, encoding in decoded:
+        if isinstance(content, bytes):
+            parts.append(content.decode(encoding or "utf-8", errors="ignore"))
+        else:
+            parts.append(str(content))
+    return "".join(parts)
+
+def is_important_email(subject: str, sender: str) -> bool:
+    """Basic keyword-based importance check."""
+    important_keywords = ["urgent", "important", "meeting", "invoice", "flight", "booking", "deadline", "otp", "verify"]
+    subj_lower = subject.lower()
+    return any(kw in subj_lower for kw in important_keywords)
+
+def _get_body_snippet(msg: Any, max_len: int = 150) -> str:
+    """Extract a short text snippet from the email body."""
+    body = ""
+    if msg.is_multipart():
+        for part in msg.walk():
+            ctype = part.get_content_type()
+            cdisp = str(part.get("Content-Disposition"))
+            if ctype == "text/plain" and "attachment" not in cdisp:
+                payload = part.get_payload(decode=True)
+                if payload:
+                    body = payload.decode(errors="ignore")
+                    break
+    else:
+        payload = msg.get_payload(decode=True)
+        if payload:
+            body = payload.decode(errors="ignore")
+    
+    # Pre-clean: strip whitespace and limit
+    snippet = " ".join(body.split())[:max_len]
+    return snippet + "..." if len(body) > max_len else snippet
+
 
 def start() -> None:
     """Start the background email checker."""
@@ -94,25 +134,54 @@ def _check_email() -> None:
         log.error("Email polling error: %s", e)
 
 
+def fetch_latest_emails(count: int = 5) -> list[dict[str, Any]]:
+    """On-demand fetch of the last 'count' emails."""
+    results = []
+    try:
+        mail = imaplib.IMAP4_SSL(config.EMAIL_IMAP_HOST, config.EMAIL_IMAP_PORT)
+        mail.login(config.EMAIL_ADDRESS, config.EMAIL_PASSWORD)
+        mail.select("inbox")
+
+        # Get the IDs of the last 'count' messages
+        status, data = mail.search(None, "ALL")
+        if status != "OK":
+            mail.logout()
+            return []
+
+        mail_ids = data[0].split()
+        latest_ids = mail_ids[-count:]
+        latest_ids.reverse() # Newest first
+
+        for mid in latest_ids:
+            status, msg_data = mail.fetch(mid, "(RFC822)")
+            if status == "OK" and isinstance(msg_data[0], tuple):
+                msg = email.message_from_bytes(msg_data[0][1])
+                subject = _decode_header(msg.get("Subject", ""))
+                sender = _decode_header(msg.get("From", ""))
+                body = _get_body_snippet(msg)
+                
+                results.append({
+                    "subject": subject,
+                    "sender": sender,
+                    "body": body,
+                    "important": is_important_email(subject, sender)
+                })
+
+        mail.logout()
+    except Exception as e:
+        log.error("Manual fetch error: %s", e)
+    
+    return results
+
+
 def _process_message(msg: Any) -> None:
     """Decode and store email info if it seems important."""
-    subject, encoding = decode_header(msg.get("Subject", ""))[0]
-    if isinstance(subject, bytes):
-        subject = subject.decode(encoding or "utf-8")
-
-    sender, encoding = decode_header(msg.get("From", ""))[0]
-    if isinstance(sender, bytes):
-        sender = sender.decode(encoding or "utf-8")
+    subject = _decode_header(msg.get("Subject", ""))
+    sender = _decode_header(msg.get("From", ""))
 
     log.info("New email from: %s (Subject: %s)", sender, subject)
 
-    # Filter rules: store as an event if it contains certain keywords
-    important_keywords = ["urgent", "important", "meeting", "invoice", "flight", "booking", "deadline"]
-    subj_lower = subject.lower()
-
-    is_important = any(kw in subj_lower for kw in important_keywords)
-
-    if is_important:
+    if is_important_email(subject, sender):
         db = get_db()
         ev_text = f"User received an important email from {sender} about {subject}"
 

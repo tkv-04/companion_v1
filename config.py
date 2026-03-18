@@ -48,6 +48,7 @@ SILENCE_THRESHOLD     = _float(os.getenv("AUDIO_SILENCE_THRESHOLD", "0.01"), 0.0
 SPEECH_BUFFER_SEC     = _float(os.getenv("AUDIO_SPEECH_BUFFER_SEC", "5"), 5.0)
 WHISPER_MODEL         = os.getenv("WHISPER_MODEL", "tiny")
 TEXT_INPUT_MODE       = _bool(os.getenv("TEXT_INPUT_MODE", "false"))
+AUDIO_DEVICE_ID       = _int(os.getenv("AUDIO_DEVICE_ID", "-1"), -1)
 
 # ── Piper TTS ────────────────────────────────────────────────────────────────
 PIPER_EXECUTABLE   = os.getenv("PIPER_EXECUTABLE", "./piper/piper")

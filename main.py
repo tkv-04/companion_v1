@@ -23,16 +23,35 @@ from utils.logger import get_logger
 
 log = get_logger("main")
 
+# ── Speech Accumulator ──
+_speech_accumulator = []
+
 
 def on_user_speech(user_text: str) -> None:
-    """
-    Main processing callback: fired whenever user speaks (or types).
-    1. Update state (user interacted)
-    2. Extract meaning & learn
-    3. Build context-aware prompt
-    4. Generate response
-    5. Speak response
-    """
+    """Callback triggered whenever user speaks. Wait for 'yeah' to process."""
+    global _speech_accumulator
+    
+    text_clean = user_text.strip().lower().rstrip(".!?")
+    
+    if text_clean.endswith(" yeah") or text_clean == "yeah":
+        # Trigger word "yeah" detected!
+        if text_clean == "yeah":
+            final_text = " ".join(_speech_accumulator)
+        else:
+            # Cut off " yeah"
+            this_segment = user_text.strip()[:-4].strip()
+            final_text = " ".join(_speech_accumulator + [this_segment])
+        
+        _speech_accumulator = []
+        if final_text:
+            _process_final_request(final_text)
+    else:
+        # Just buffer it
+        _speech_accumulator.append(user_text.strip())
+        log.info("🎤 Listening... (Buffered: %s)", user_text.strip())
+
+def _process_final_request(user_text: str) -> None:
+    """The original processing logic, now called only when 'yeah' is said."""
     log.info("\n👤 User: %s", user_text)
 
     # 1. Update consciousness state
@@ -63,6 +82,28 @@ def on_user_speech(user_text: str) -> None:
     # 6. Apply personality post-processing
     final_response = personality.apply_personality(raw_response, mood=state.get_mood())
     
+    # ── Mail Interaction ─────────────────────────────────────────────────────
+    text_lower = user_text.lower()
+    # Broadened matching to catch variations like 'checked', 'check', and mishearings like 'main', 'made'
+    mail_keywords = ["mail", "main", "made", "meal", "mate", "mail check", "check my mail"]
+    is_mail_request = any(k in text_lower for k in mail_keywords) and ("check" in text_lower or "read" in text_lower or "any" in text_lower)
+
+    if is_mail_request:
+        log.info("Fetching latest email for user...")
+        latest_mails = email_service.fetch_latest_emails(count=1)
+        
+        if not latest_mails:
+            mail_summary = "Your inbox is empty."
+        else:
+            mail_summary = ""
+            for m in latest_mails:
+                status = "IMPORTANT: " if m["important"] else ""
+                # Only include Subject and Body as requested
+                mail_summary += f"{status}Subject: {m['subject']}. Content: {m['body']} "
+        
+        # Mix it into the final response
+        final_response = f"{mail_summary} {final_response}"
+    
     # Language Switch Detection
     text_lower = user_text.lower()
     if "speak in malayalam" in text_lower or "മലയാളം" in text_lower or (config.CURRENT_LANGUAGE != "ml" and "malayalam" in text_lower):
@@ -72,13 +113,6 @@ def on_user_speech(user_text: str) -> None:
         config.CURRENT_LANGUAGE = "en"
         log.info("Switching voice to English.")
 
-    # Add memory recall prefix optionally
-    if not extr.is_question and extr.topics and facts_stored == 0:
-        # User statement, no new facts -> chance to recall old memory
-        if retriever.retrieve_memories(user_text, extr.topics, limit=1):
-            if "I remember" not in final_response:
-                prefix = personality.make_memory_recall_prefix(extr.topics[0])
-                final_response = f"{prefix} {final_response}"
 
     log.info("\n✨ Delulu: %s\n", final_response)
 
