@@ -34,6 +34,9 @@ _whisper_model = None
 
 def _get_whisper():
     global _whisper_model
+    if config.USE_GROQ_STT:
+        return None # Using Groq API instead
+    
     if _whisper_model is None:
         import whisper
         log.info("Loading Whisper '%s' model...", config.WHISPER_MODEL)
@@ -47,7 +50,7 @@ _audio_queue: queue.Queue       = queue.Queue()
 _speech_buffer: list[np.ndarray] = []
 _in_speech     = False
 _silence_count = 0
-_SILENCE_CHUNKS_NEEDED = int(2.2 / config.AUDIO_CHUNK_DURATION)  # More natural pause (2.2s silence)
+_SILENCE_CHUNKS_NEEDED = int(3.5 / config.AUDIO_CHUNK_DURATION)  # Longer pause (3.5s silence) for natural speech flow
 
 
 # ── Public API ─────────────────────────────────────────────────────────────
@@ -90,7 +93,7 @@ def start_listening(on_transcription: Callable[[str], None]) -> None:
 def _keyboard_input_loop(callback: Callable[[str], None]) -> None:
     print(f"\n{'='*50}")
     print(f"  {config.AI_NAME} is listening (text mode).")
-    print(f"  Type your message and press Enter.")
+    print(f"  Type your message and press Enter, bestie! ")
     print(f"{'='*50}\n")
     while True:
         try:
@@ -179,10 +182,53 @@ def _process_chunk(chunk: np.ndarray, callback: Callable[[str], None]) -> None:
                 num_samples = int(len(audio_data) * 16000 / config.AUDIO_SAMPLE_RATE)
                 audio_data = signal.resample(audio_data, num_samples)
 
-            _transcribe(audio_data, callback)
+            if config.USE_GROQ_STT:
+                _transcribe_groq(audio_data, callback)
+            else:
+                _transcribe_local(audio_data, callback)
 
 
-def _transcribe(audio: np.ndarray, callback: Callable[[str], None]) -> None:
+def _transcribe_groq(audio_data: np.ndarray, callback: Callable[[str], None]) -> None:
+    """Run Whisper STT via Groq Cloud for instant, high-accuracy results."""
+    try:
+        from groq import Groq
+        
+        # Ensure we have data
+        if len(audio_data) == 0: return
+
+        # Encode to WAV in memory
+        buffer = io.BytesIO()
+        wavfile.write(buffer, 16000, audio_data)
+        buffer.seek(0)
+        
+        # Append filename-like object for Groq
+        buffer.name = "audio.wav"
+
+        client = Groq(api_key=config.GROQ_API_KEY)
+        
+        # Transcription prompt
+        prompt = "The user is speaking natural conversational English. Please transcribe accurately."
+        
+        log.debug("Sending audio to Groq STT...")
+        transcription = client.audio.transcriptions.create(
+            file=buffer,
+            model="whisper-large-v3", # Use full Large V3 on Groq!
+            prompt=prompt,
+            response_format="text",
+            language=config.CURRENT_LANGUAGE if config.CURRENT_LANGUAGE in ["en", ] else None
+        )
+        
+        text = str(transcription).strip()
+        _handle_transcription(text, audio_data, callback)
+
+    except Exception as e:
+        log.error("Groq STT error: %s", e)
+        # Fallback to local if possible?
+        log.info("Falling back to local transcription...")
+        _transcribe_local(audio_data, callback)
+
+
+def _transcribe_local(audio: np.ndarray, callback: Callable[[str], None]) -> None:
     """Run Whisper STT on buffered audio with hallucination filtering."""
     try:
         # 1 — Basic energy check (ensure captured audio isn't just silence/noise)
@@ -193,34 +239,46 @@ def _transcribe(audio: np.ndarray, callback: Callable[[str], None]) -> None:
             return
 
         model = _get_whisper()
+        if not model:
+            log.error("Local Whisper model not loaded.")
+            return
+
         # Use current language from config for better accuracy
-        lang = config.CURRENT_LANGUAGE if config.CURRENT_LANGUAGE in ["en", "ml"] else None
+        lang = config.CURRENT_LANGUAGE if config.CURRENT_LANGUAGE in ["en", ] else None
         
         result = model.transcribe(audio, fp16=False, language=lang)
         text = result.get("text", "").strip()
         
-        if not text:
-            return
+        _handle_transcription(text, audio, callback)
 
-        # 2 — Filter Whisper hallucinations (common noise interpretations)
-        hallucinations = [
-            "thank you for watching", "subscribed", "thanks for watching",
-            "thank you", "subtitles by", "bye", "you", "so", "oh", "um", "the", "."
-        ]
-        
-        clean_text = text.lower().replace(".", "").replace(",", "").replace("!", "").strip()
-        
-        if clean_text in hallucinations:
-            log.debug("Filtered transcription hallucination: '%s'", text)
-            return
-            
-        # Ignore very short nonsensical transcriptions if energy is borderline
-        if len(text) <= 3 and avg_rms < config.SILENCE_THRESHOLD * 1.5:
-             log.debug("Filtered short borderline energy noise: '%s'", text)
-             return
-
-        log.info("🎤 Captured: %s", text)
-        callback(text)
-        
     except Exception as e:
-        log.error("Whisper error: %s", e)
+        log.error("Whisper local error: %s", e)
+
+
+def _handle_transcription(text: str, audio: np.ndarray, callback: Callable[[str], None]) -> None:
+    """Consolidated transcription filtering and callback."""
+    if not text:
+        return
+
+    # 2 — Filter Whisper hallucinations (common noise interpretations)
+    hallucinations = [
+        "thank you for watching", "subscribed", "thanks for watching",
+        "thank you", "subtitles by", "bye", "you", "so", "oh", "um", "the", ".",
+        "you guys", "watch this", "don't forget to", "be sure to", "and we'll see you",
+        "i'll see you in the next one", "sharing", "commenting", "okay", "ok"
+    ]
+    
+    clean_text = text.lower().replace(".", "").replace(",", "").replace("!", "").strip()
+    
+    if clean_text in hallucinations:
+        log.debug("Filtered transcription hallucination: '%s'", text)
+        return
+        
+    # Ignore very short nonsensical transcriptions if energy is borderline
+    avg_rms = float(np.sqrt(np.mean(audio ** 2)))
+    if len(text) <= 5 and avg_rms < config.SILENCE_THRESHOLD * 2.0:
+            log.debug("Filtered short borderline energy noise: '%s'", text)
+            return
+
+    log.info("🎤 Captured: %s", text)
+    callback(text)

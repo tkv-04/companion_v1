@@ -58,7 +58,7 @@ def on_user_speech(user_text: str) -> None:
         elif any(k in text_lower for k in ["no", "don't", "stop", "nevermind", "cancel", "no thanks"]):
             log.info("Confirmation denied for: %s", pending_song)
             state.set_pending_song(None) # Clear
-            tts.speak("No problem, I won't play it.")
+            tts.speak("No problem, bestie! I won't play it.")
             return
 
     # 1. Stop Music (Highest priority to avoid regex conflicts)
@@ -66,14 +66,14 @@ def on_user_speech(user_text: str) -> None:
         log.info("Stopping music session...")
         state.set_pending_song(None) # Clear pending if stopping
         music_service.stop_music()
-        tts.speak("Okay, I've stopped the music.")
+        tts.speak("Okay, bestie! I've stopped the music for you.")
         return
 
     # 2. Play Random / Specific Music
     if "sing a song" in text_lower or "play some music" in text_lower:
         log.info("Requesting random music confirmation...")
         state.set_pending_song("random_music_request")
-        tts.speak("You want to hear some music? Should I play something popular for you?")
+        tts.speak("Ooh! You want to hear some music? Should I play something cute and popular for you?")
         return
 
     play_match = re.search(r"play\s+(.+)", text_lower)
@@ -83,7 +83,7 @@ def on_user_speech(user_text: str) -> None:
         if song_query not in ["with me", "a game", "around", "playing", "music"]:
             log.info("Requesting specific music confirmation: %s", song_query)
             state.set_pending_song(song_query)
-            tts.speak(f"Oh! You want to hear {song_query}? Just to be sure, should I play it?")
+            tts.speak(f"Oh! You want to hear {song_query}, sweetie? Just to be sure, should I play it?")
             return
 
     # 1. Update consciousness state
@@ -107,7 +107,7 @@ def on_user_speech(user_text: str) -> None:
     log.info("💭 Thinking...")
     raw_response = reasoning.generate(
         prompt,
-        max_tokens=150,  # Malayalam tokens take up more space!
+        max_tokens=100,
         temperature=0.7
     )
 
@@ -135,18 +135,15 @@ def on_user_speech(user_text: str) -> None:
         
         # Mix it into the final response
         final_response = f"{mail_summary} {final_response}"
-    
-    # Language Switch Detection
-    text_lower = user_text.lower()
-    if "speak in malayalam" in text_lower or "മലയാളം" in text_lower or (config.CURRENT_LANGUAGE != "ml" and "malayalam" in text_lower):
-        config.CURRENT_LANGUAGE = "ml"
-        log.info("Switching voice to Malayalam.")
-    elif "speak in english" in text_lower or (config.CURRENT_LANGUAGE == "ml" and "english" in text_lower):
-        config.CURRENT_LANGUAGE = "en"
-        log.info("Switching voice to English.")
+
+    # ── Feedback handling (Hallucination/Listening issues) ──
+    if any(k in text_lower for k in ["hallucin", "never said", "didn't say", "did i say", "wrong"]):
+        log.warning("User pointed out a hallucination or listening error.")
+        # Override the response with a gentle apology
+        final_response = "I'm so sorry, bestie! I think I misunderstood or misheard you. I'll listen more carefully now, I promise."
 
 
-    log.info("\n✨ Delulu: %s\n", final_response)
+    log.info("\n✨ delulu: %s\n", final_response)
 
     # 7. Record and Speak
     learner.record_message("assistant", final_response, extr.topics)
@@ -184,7 +181,7 @@ def start_system() -> None:
 
         # ── Startup Greeting ──
         # Let the user know we are awake and listening!
-        threading.Thread(target=tts.speak_sync, args=("Hey there! I'm wide awake and listening. What's on your mind?",), daemon=True).start()
+        threading.Thread(target=tts.speak_sync, args=("Hi bestie! I'm wide awake and so happy to see you. What's on your mind today?",), daemon=True).start()
 
         # Main thread simply sleeps and keeps daemon threads alive
         while True:

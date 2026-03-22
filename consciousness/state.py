@@ -21,14 +21,14 @@ _STATE_ID = "current_state"
 # ── Mood transition table ────────────────────────────────────────────────────
 # (current_mood, trigger) → new_mood
 _MOOD_TRANSITIONS: dict[tuple[str, str], str] = {
-    ("curious",  "long_silence"):    "bored",
-    ("bored",    "user_spoke"):      "excited",
-    ("excited",  "user_quiet"):      "curious",
-    ("playful",  "long_silence"):    "thoughtful",
-    ("thoughtful","user_spoke"):     "curious",
+    ("curious",  "long_silence"):    "sleepy",
+    ("sleepy",   "user_spoke"):      "happy",
+    ("happy",    "user_quiet"):      "curious",
+    ("sweet",    "long_silence"):    "cozy",
+    ("cozy",     "user_spoke"):      "curious",
     ("neutral",  "user_spoke"):      "curious",
-    ("curious",  "learned_something"): "excited",
-    ("excited",  "learned_something"): "playful",
+    ("curious",  "learned_something"): "happy",
+    ("happy",    "learned_something"): "sweet",
 }
 
 def _mood_change(current: str, trigger: str) -> str:

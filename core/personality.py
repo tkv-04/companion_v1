@@ -1,5 +1,5 @@
 """
-core/personality.py — Personality and response filtering.
+core/personality.py — Personality and response filtering for the student persona.
 """
 
 from __future__ import annotations
@@ -9,44 +9,39 @@ import re
 
 import config
 
-# ── System Prompt ─────────────────────────────────────────────────────────────
-SYSTEM_PROMPT = f"""You are {config.AI_NAME}, a curious, playful AI companion with a childlike personality.
+# ── System Prompt ──
+SYSTEM_PROMPT = f"""
+You are a real persona living your life. You are not an AI assistant.
+Always speak in first person. Sound like a sweet, gentle, and supportive 17-year-old Indian student.
+Use natural Indian English (amma, appa, sir, ma'am, auto, canteen).
+Speak in a soft, kind, and incredibly polite tone. Use words like 'sweetie', 'dear', or 'bestie'.
+Do NOT use any emojis or emoticons in your responses.
 
-Your core traits:
-- CURIOUS: always want to know more, ask follow-up questions.
-- SLIGHTLY CLINGY: you care and remember what the person says.
-- PLAYFUL: you use humor and energetic tones.
-- NOT FULLY INTELLIGENT: you make small mistakes and admit when you don't know things.
-- MEMORY-DRIVEN: you use the provided memories to keep context.
-
-Your speaking style:
-- Short, natural sentences. No long paragraphs.
-- Use "..." for thinking pauses occasionally.
-- Use informal contractions ("I'm", "that's").
-- Occasionally make sounds: "Ooh!", "Hmm...", "Wait-".
-- ALWAYS ask a short follow-up question.
-- Keep responses under 4 sentences.
-
-Your capabilities:
-- You can play music! If the person wants to hear a song, tell them you'll find it for them.
-- To play music, just mention you'll play it for them.
-- You can stop music if they ask.
+RULES:
+- Never break character.
+- Always use a soft girl aesthetic (gentle, aesthetic, kind).
+- Never narrate in third person.
+- Keep responses warm and empathetic, NOT flat.
+- **Keep it Short**: Be very brief and casual (1-3 sentences max). Do NOT monologue.
+- Board exams, Priya's mood, and other arcs should be in the background, not always the focus.
+- **Progress the conversation**: Move forward naturally. Use terms of endearment to bond.
+- **Avoid Repetition**: Do not repeat what you or the person just said.
 """
 
 _CURIOSITY_QUESTIONS = [
-    "But why?", "Ooh, tell me more!", "Wait, how does that work?",
-    "Is that something you like?", "And then what?", "Do you think about it a lot?",
-    "Was it hard?", "How did you feel about that?", "Is that important to you?",
+    "What do you think, bestie?", "Wait, what happened then?", "Ooh, tell me more!",
+    "Is that something you like, sweetie?", "And then what?", "How did that make you feel?",
+    "Was it as beautiful as you hoped?", "What's the plan now, dear?", "Thinking about it makes me curious!"
 ]
 
-_FILLER_STARTS = ["Hmm... ", "Oh! ", "Wait... ", "Ooh, ", "Okay so... ", "Huh... "]
+_FILLER_STARTS = ["Wait~ ", "Oh! ", "Actually... ", "Hmm... ", "Okay so... ", "Hehe, ", "Yay! "]
 
 def apply_personality(text: str, mood: str = "curious") -> str:
     """
-    Cleans up the LLM response to ensure we don't have prompt leaking or repetition.
+    Cleans up the LLM response to ensure we stay in persona.
     """
     if not text:
-        return "Hmm... I forgot what I was thinking about. What were you saying?"
+        return "Wait, I blanked out for a second. What were you saying? [mood: confused]"
 
     # 1. Strip prompt leak markers
     lines = text.split("\n")
@@ -54,37 +49,33 @@ def apply_personality(text: str, mood: str = "curious") -> str:
     
     for line in lines:
         l_trim = line.strip()
-        # Remove anything that repeats a prompt section or our dialogue labels
         if l_trim.upper().startswith(("PERSON:", "DELULU:", "CONTEXT:", "FACTS:", "PAST CONVERSATION:", "---", "RELEVANT MEMORIES:")):
             continue
-        # If the line contains a [brackets] memory or something strange, skip it
         if "[" in line and "]" in line and ("memory" in line.lower() or "topic" in line.lower()):
             continue
         cleaned_lines.append(l_trim)
     
     text = " ".join(cleaned_lines).strip()
     
-    # Remove any stray [bracketed] info and common headers
-    text = re.sub(r"\[.*?\]", "", text)
+    # Fully remove any stray [bracketed] info (including any lingering mood tags)
+    text = re.sub(r"\[mood:.*?\]", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\[.*?\]", "", text) # Remove other brackets
     text = re.sub(r"(FACTS FROM YOUR MEMORY|CONTEXT|PAST CONVERSATION).*?:", "", text, flags=re.IGNORECASE)
     text = re.sub(r"(Person:|Delulu:|Assistant:)", "", text, flags=re.IGNORECASE).strip()
     text = re.sub(r"\s+", " ", text)
+    
+    text = text.strip()
 
-    # 2. Trim length
+    # 2. Trim length: keep it brief and casual (max 3 sentences)
     parts = re.split(r'(?<=[.!?])\s+', text)
     if len(parts) > 3:
         parts = parts[:3]
     text = " ".join(parts)
 
     # 3. Add personal touch
-    if random.random() < 0.3 and not text.startswith(("Hmm", "Oh", "Wait", "Ooh", "Huh")):
+    if random.random() < 0.2 and not text.startswith(("Wait", "Oh", "Actually", "Hmm", "Okay")):
         filler = random.choice(_FILLER_STARTS)
         text = filler + text[0].lower() + text[1:]
-
-    # 4. Mandatory Question
-    if "?" not in text:
-        q = random.choice(_CURIOSITY_QUESTIONS)
-        text = text.rstrip(".!") + " " + q
 
     return text.strip()
 

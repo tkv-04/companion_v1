@@ -61,7 +61,7 @@ def generate(prompt, max_tokens=200, temperature=0.8):
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=max_tokens,
                 temperature=temperature,
-                stop=["Person:", "\nPerson", "Delulu:", "\nDelulu"]
+                stop=["Person:", "\nPerson", "delulu:", "\ndelulu"]
             )
             return response.choices[0].message.content.strip()
             
@@ -73,7 +73,7 @@ def generate(prompt, max_tokens=200, temperature=0.8):
                 generation_config=genai.types.GenerationConfig(
                     max_output_tokens=max_tokens,
                     temperature=temperature,
-                    stop_sequences=["Person:", "Person (", "\nPerson", "Delulu:", "\nDelulu"]
+                    stop_sequences=["Person:", "Person (", "\nPerson", "delulu:", "\ndelulu"]
                 )
             )
             return response.text.strip()

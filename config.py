@@ -48,6 +48,7 @@ SILENCE_THRESHOLD     = _float(os.getenv("AUDIO_SILENCE_THRESHOLD", "0.01"), 0.0
 SPEECH_BUFFER_SEC     = _float(os.getenv("AUDIO_SPEECH_BUFFER_SEC", "5"), 5.0)
 WHISPER_MODEL         = os.getenv("WHISPER_MODEL", "tiny")
 TEXT_INPUT_MODE       = _bool(os.getenv("TEXT_INPUT_MODE", "false"))
+USE_GROQ_STT          = _bool(os.getenv("USE_GROQ_STT", "false"))
 AUDIO_DEVICE_ID       = _int(os.getenv("AUDIO_DEVICE_ID", "-1"), -1)
 
 # ── Piper TTS ────────────────────────────────────────────────────────────────
@@ -65,7 +66,7 @@ EMAIL_CHECK_INTERVAL   = _int(os.getenv("EMAIL_CHECK_INTERVAL_MIN", "10"), 10)
 EMAIL_MAX_FETCH        = _int(os.getenv("EMAIL_MAX_FETCH", "5"), 5)
 
 # ── Personality & Consciousness ───────────────────────────────────────────────
-AI_NAME                  = os.getenv("AI_NAME", "Delulu")
+AI_NAME                  = os.getenv("AI_NAME", "delulu")
 THOUGHT_LOOP_MIN_SEC     = _int(os.getenv("THOUGHT_LOOP_MIN_SEC", "30"), 30)# ── Music ────────────────────────────────────────────────────────────────────
 RAPIDAPI_KEY          = os.getenv("RAPIDAPI_KEY", "")
 MUSIC_API_HOST        = os.getenv("MUSIC_API_HOST", "shazam-core.p.rapidapi.com")
@@ -92,7 +93,7 @@ USE_NVIDIA        = _bool(os.getenv("USE_NVIDIA", "false"))
 NVIDIA_MODEL      = os.getenv("NVIDIA_MODEL", "meta/llama-3.3-70b-instruct")
 
 # ── Language ───────────────────────────────────────────────────────────────
-CURRENT_LANGUAGE  = os.getenv("CURRENT_LANGUAGE", "en") # 'en' or 'ml'
+CURRENT_LANGUAGE  = os.getenv("CURRENT_LANGUAGE", "en")
 SILENCE_THRESHOLD = _float(os.getenv("AUDIO_SILENCE_THRESHOLD", "0.01"), 0.01)
 
 # ── Derived paths ────────────────────────────────────────────────────────────

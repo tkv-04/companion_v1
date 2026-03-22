@@ -1,7 +1,7 @@
-# Delulu Her — Local AI Companion
+# delulu — Soft Girl AI Companion ✨🌸
 
 A fully local, lightweight AI companion designed to run on a Raspberry Pi 5 or a laptop.
-Delulu Her behaves like a curious, somewhat chaotic, and slightly clingy companion. She learns from your conversations, builds a long-term memory in MongoDB, and even generates her own spontaneous thoughts when it’s quiet.
+delulu is a sweet, gentle, and supportive 17-year-old student who loves cozy aesthetics and making you feel warm and fuzzy. 💖 She learns from your conversations, builds a long-term memory in MongoDB, and even generates her own dreamy thoughts when it’s quiet. ☁️✨
 
 ## Core Architecture
 
@@ -50,6 +50,7 @@ If you want the most natural sounding voice offline, install [Piper](https://git
 ## Configuration
 
 Copy the example environment file:
+
 ```bash
 cp .env.example .env
 ```
@@ -69,20 +70,20 @@ If `TEXT_INPUT_MODE=true`:
 
 ```text
 ==================================================
-  Delulu is listening (text mode).
+  delulu is listening (text mode). 🌸✨
   Type your message and press Enter.
 ==================================================
 
-You: I am learning how to use Kubernetes.
-[12:34:56] main INFO     👤 User: I am learning how to use Kubernetes.
+You: I am learning how to use Kubernetes, bestie! 💖
+[12:34:56] main INFO     👤 User: I am learning how to use Kubernetes, bestie! 💖
 [12:34:56] learner INFO  🧠 Learned: [kubernetes] am learning how to use
-[12:34:56] main INFO     💭 Thinking...
-[12:34:58] main INFO     ✨ Delulu: Ooh... Kubernetes! Is that hard to learn? Wait, what does it actually do?
+[12:34:56] main INFO     💭 Thinking... ✨
+[12:34:58] main INFO     ✨ delulu: Ooh! Kubernetes sounds so cool, sweetie! 🌟 Is it fun to learn? I'd love to hear more about it! ✨ [mood: happy 💖]
 ```
 
 ## Collections Reference
 
-If you want to view Delulu's memories, connect to your local MongoDB (database `delulu_her`) and inspect the collections:
+If you want to view delulu's memories, connect to your local MongoDB (database `delulu_her`) and inspect the collections:
 
 - `memories`: Core learned facts and recall counts.
 - `knowledge`: Broad topic domain knowledge.
